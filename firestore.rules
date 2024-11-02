@@ -1,0 +1,212 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function belongsToAccount(accountId) {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountId == accountId;
+    }
+
+    function hasRole(role) {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
+    }
+
+    function isAdmin() {
+      return hasRole('admin');
+    }
+
+    function isValidSubscription() {
+      return get(/databases/$(database)/documents/subscriptions/$(request.auth.uid)).data.status == 'active';
+    }
+
+    function hasPermission(permission) {
+      let userRole = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      let rolePermissions = get(/databases/$(database)/documents/roles/$(userRole)).data.permissions;
+      return rolePermissions[permission] == true;
+    }
+
+    // Collection Rules
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || belongsToAccount(resource.data.accountId));
+      allow create: if false; // Users created only by backend
+      allow update: if isAuthenticated() && request.auth.uid == userId;
+      allow delete: if false; // Users deleted only by backend
+    }
+
+    // Accounts collection
+    match /accounts/{accountId} {
+      allow read: if isAuthenticated() && belongsToAccount(accountId);
+      allow create: if false; // Accounts created only by backend
+      allow update: if isAuthenticated() && belongsToAccount(accountId) && hasRole('admin');
+      allow delete: if false; // Accounts deleted only by backend
+    }
+
+    // Pipeline Configs collection
+    match /pipelineConfigs/{configId} {
+      allow read: if isAuthenticated() && belongsToAccount(resource.data.accountId);
+      allow create: if isAuthenticated() && belongsToAccount(request.resource.data.accountId);
+      allow update: if isAuthenticated() && belongsToAccount(resource.data.accountId);
+      allow delete: if isAuthenticated() && belongsToAccount(resource.data.accountId);
+    }
+
+    // Contacts collection
+    match /contacts/{contactId} {
+      allow read: if isAuthenticated() && belongsToAccount(resource.data.accountId);
+      allow create: if isAuthenticated() && belongsToAccount(request.resource.data.accountId) && hasPermission('contacts.create');
+      allow update: if isAuthenticated() && belongsToAccount(resource.data.accountId) && hasPermission('contacts.edit');
+      allow delete: if isAuthenticated() && belongsToAccount(resource.data.accountId) && hasPermission('contacts.delete');
+    }
+
+    // Deals collection
+    match /deals/{dealId} {
+      allow read: if isAuthenticated() && belongsToAccount(resource.data.accountId);
+      allow create: if isAuthenticated() && belongsToAccount(request.resource.data.accountId) && hasPermission('deals.create');
+      allow update: if isAuthenticated() && belongsToAccount(resource.data.accountId) && hasPermission('deals.edit');
+      allow delete: if isAuthenticated() && belongsToAccount(resource.data.accountId) && hasPermission('deals.delete');
+    }
+
+    // Contact Deals collection
+    match /contactDeals/{dealId} {
+      allow read: if isAuthenticated() && belongsToAccount(resource.data.accountId);
+      allow create: if isAuthenticated() && belongsToAccount(request.resource.data.accountId) && hasPermission('deals.create');
+      allow update: if isAuthenticated() && belongsToAccount(resource.data.accountId) && hasPermission('deals.edit');
+      allow delete: if isAuthenticated() && belongsToAccount(resource.data.accountId) && hasPermission('deals.delete');
+    }
+
+    // Tasks collection
+    match /tasks/{taskId} {
+      allow read: if isAuthenticated() && belongsToAccount(resource.data.accountId);
+      allow create: if isAuthenticated() && belongsToAccount(request.resource.data.accountId);
+      allow update: if isAuthenticated() && belongsToAccount(resource.data.accountId) && 
+        (resource.data.assigneeId == request.auth.uid || hasRole('admin') || hasRole('manager'));
+      allow delete: if isAuthenticated() && belongsToAccount(resource.data.accountId) && 
+        (resource.data.assigneeId == request.auth.uid || hasRole('admin') || hasRole('manager'));
+    }
+
+    // Task Comments collection
+    match /taskComments/{commentId} {
+      allow read: if isAuthenticated() && belongsToAccount(resource.data.accountId);
+      allow create: if isAuthenticated() && belongsToAccount(request.resource.data.accountId);
+      allow update: if isAuthenticated() && belongsToAccount(resource.data.accountId) && request.auth.uid == resource.data.userId;
+      allow delete: if isAuthenticated() && belongsToAccount(resource.data.accountId) && 
+        (request.auth.uid == resource.data.userId || hasRole('admin'));
+    }
+
+    // Task Activities collection
+    match /taskActivities/{activityId} {
+      allow read: if isAuthenticated() && belongsToAccount(resource.data.accountId);
+      allow create: if isAuthenticated() && belongsToAccount(request.resource.data.accountId);
+      allow update: if false; // Activities are immutable
+      allow delete: if false; // Activities are immutable
+    }
+
+    // Task Attachments collection
+    match /taskAttachments/{attachmentId} {
+      allow read: if isAuthenticated() && belongsToAccount(resource.data.accountId);
+      allow create: if isAuthenticated() && belongsToAccount(request.resource.data.accountId);
+      allow update: if isAuthenticated() && belongsToAccount(resource.data.accountId) && request.auth.uid == resource.data.uploadedBy;
+      allow delete: if isAuthenticated() && belongsToAccount(resource.data.accountId) && 
+        (request.auth.uid == resource.data.uploadedBy || hasRole('admin'));
+    }
+
+    // Pipelines collection
+    match /pipelines/{pipelineId} {
+      allow read: if isAuthenticated() && belongsToAccount(resource.data.accountId);
+      allow create: if isAuthenticated() && belongsToAccount(request.resource.data.accountId) && hasRole('admin');
+      allow update: if isAuthenticated() && belongsToAccount(resource.data.accountId) && hasRole('admin');
+      allow delete: if isAuthenticated() && belongsToAccount(resource.data.accountId) && hasRole('admin');
+    }
+
+    // Contact Activities collection
+    match /contactActivities/{activityId} {
+      allow read: if isAuthenticated() && belongsToAccount(resource.data.accountId);
+      allow create: if isAuthenticated() && belongsToAccount(request.resource.data.accountId);
+      allow update: if false; // Activities are immutable
+      allow delete: if false; // Activities are immutable
+    }
+
+    // Custom Fields collection
+    match /customFields/{fieldId} {
+      allow read: if isAuthenticated() && belongsToAccount(resource.data.accountId);
+      allow create: if isAuthenticated() && belongsToAccount(request.resource.data.accountId) && hasRole('admin');
+      allow update: if isAuthenticated() && belongsToAccount(resource.data.accountId) && hasRole('admin');
+      allow delete: if isAuthenticated() && belongsToAccount(resource.data.accountId) && hasRole('admin');
+    }
+
+    // Field Values collection
+    match /fieldValues/{valueId} {
+      allow read: if isAuthenticated() && belongsToAccount(resource.data.accountId);
+      allow create: if isAuthenticated() && belongsToAccount(request.resource.data.accountId);
+      allow update: if isAuthenticated() && belongsToAccount(resource.data.accountId);
+      allow delete: if isAuthenticated() && belongsToAccount(resource.data.accountId);
+    }
+
+    // Metrics collection
+    match /metrics/{metricId} {
+      allow read: if isAuthenticated() && belongsToAccount(resource.data.accountId);
+      allow create: if isAuthenticated() && belongsToAccount(request.resource.data.accountId) && hasPermission('analytics.view');
+      allow update: if isAuthenticated() && belongsToAccount(resource.data.accountId) && hasPermission('analytics.view');
+      allow delete: if isAuthenticated() && belongsToAccount(resource.data.accountId) && hasRole('admin');
+    }
+
+    // Subscriptions collection
+    match /subscriptions/{subscriptionId} {
+      allow read: if isAuthenticated() && belongsToAccount(resource.data.accountId);
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if false; // Only through backend
+    }
+
+    // Usage collection
+    match /usage/{usageId} {
+      allow read: if isAuthenticated() && belongsToAccount(resource.data.accountId);
+      allow create: if isAuthenticated() && belongsToAccount(request.resource.data.accountId);
+      allow update: if false; // Usage records are immutable
+      allow delete: if false; // Usage records are immutable
+    }
+
+    // API Keys collection
+    match /apiKeys/{keyId} {
+      allow read: if isAuthenticated() && belongsToAccount(resource.data.accountId);
+      allow create: if isAuthenticated() && belongsToAccount(request.resource.data.accountId) && hasRole('admin');
+      allow update: if isAuthenticated() && belongsToAccount(resource.data.accountId) && hasRole('admin');
+      allow delete: if isAuthenticated() && belongsToAccount(resource.data.accountId) && hasRole('admin');
+    }
+
+    // API Logs collection
+    match /apiLogs/{logId} {
+      allow read: if isAuthenticated() && belongsToAccount(resource.data.accountId);
+      allow create: if isAuthenticated();
+      allow update: if false; // Logs are immutable
+      allow delete: if false; // Logs are immutable
+    }
+
+    // Integrations collection
+    match /integrations/{integrationId} {
+      allow read: if isAuthenticated() && belongsToAccount(resource.data.accountId);
+      allow create: if isAuthenticated() && belongsToAccount(request.resource.data.accountId) && hasRole('admin');
+      allow update: if isAuthenticated() && belongsToAccount(resource.data.accountId) && hasRole('admin');
+      allow delete: if isAuthenticated() && belongsToAccount(resource.data.accountId) && hasRole('admin');
+    }
+
+    // Integration Sync Logs collection
+    match /integrationSyncLogs/{logId} {
+      allow read: if isAuthenticated() && belongsToAccount(resource.data.accountId);
+      allow create: if isAuthenticated() && belongsToAccount(request.resource.data.accountId);
+      allow update: if false; // Logs are immutable
+      allow delete: if false; // Logs are immutable
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
