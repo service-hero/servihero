@@ -4,9 +4,14 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  base: '/servihero/',
   server: {
+    host: true,
     port: 3000,
-    open: true
+    strictPort: true,
+    hmr: {
+      clientPort: 3000
+    }
   },
   resolve: {
     alias: {

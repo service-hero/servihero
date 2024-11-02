@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
@@ -19,10 +19,12 @@ import Chat from './pages/Chat';
 import Agency from './pages/Agency';
 import Marketing from './pages/Marketing';
 import Integrations from './pages/Integrations';
+import WebContainerTest from './components/test/WebContainerTest';
 import ApiTest from './components/test/ApiTest';
 
 export default function App() {
   const { user, loading } = useAuth();
+  const [showTest, setShowTest] = useState(true);
 
   // Show loading state
   if (loading) {
@@ -31,6 +33,11 @@ export default function App() {
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
       </div>
     );
+  }
+
+  // Show test component in development
+  if (import.meta.env.DEV && showTest) {
+    return <WebContainerTest onExit={() => setShowTest(false)} />;
   }
 
   return (
